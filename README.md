@@ -1,6 +1,6 @@
 # Zammad Round-Robin Auto Assignment
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 A stateless, webhook-driven round-robin assignment service for Zammad that assigns tickets evenly across eligible group agents using Redis for cursor persistence. Designed to integrate with Zammad Triggers + Webhooks without modifying Zammad core.
 
@@ -178,4 +178,4 @@ Contributions, issues, and feature requests are welcome. Please open an issue or
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the `LICENSE` file for details or https://www.gnu.org/licenses/agpl-3.0 for the full text.
