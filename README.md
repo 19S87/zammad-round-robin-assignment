@@ -1,54 +1,91 @@
-
 # Zammad Round-Robin Auto Assignment
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+A stateless, webhook-driven round-robin assignment service for Zammad that assigns tickets evenly across eligible group agents using Redis for cursor persistence. Designed to integrate with Zammad Triggers + Webhooks without modifying Zammad core.
+
+Table of Contents
+- [Overview](#overview)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+  - [Clone](#clone)
+  - [Configure environment variables](#configure-environment-variables)
+  - [Add to Docker Compose](#add-to-docker-compose)
+  - [Start the service](#start-the-service)
+- [Zammad Integration](#zammad-integration)
+  - [Create Webhook](#create-webhook)
+  - [Create Trigger](#create-trigger)
+- [Behavior & Security](#behavior--security)
+- [Data & Persistence](#data--persistence)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
 
 ## Overview
 
-Zammad does not provide true round-robin ticket assignment out of the box for groups.
-This project implements a stateless, webhook-driven round-robin assignment service that:
-    • Assigns tickets evenly across eligible group agents
-    • Persists state in Redis
-    • Respects Zammad permission and ownership rules
-    • Works with nested groups
-    • Is container-ready and production safe
+Zammad does not provide true round-robin ticket assignment for groups by default. This project implements a lightweight service that:
 
-This solution integrates cleanly using Zammad Triggers + Webhooks and does not modify Zammad core code.
+- Assigns tickets evenly across eligible agents in a group (round-robin)
+- Persists a cursor per group in Redis for crash-safe operation
+- Respects Zammad permissions and ownership rules
+- Works with nested groups
+- Is container-first and production-ready
+
+This service integrates with Zammad using a webhook (no core changes required).
 
 ## Features
-    •  True round-robin per group
-    •  Skips inactive / non-assignable users
-    •  Redis-backed cursor (crash-safe)
-    •  HMAC webhook verification
-    •  Docker-first deployment
-    •  Works with Zammad Community & Enterprise
+
+- True per-group round-robin
+- Skips inactive or non-assignable users
+- Redis-backed cursor for durability
+- HMAC webhook verification for authenticity
+- Simple Docker deployment
+- Supports Zammad Community & Enterprise
 
 ## Prerequisites
-    1. Zammad (Docker-based setup recommended)
-    2. Redis (already included with Zammad)
-    3. Docker & Docker Compose
-    4. Zammad Admin or Agent API Token
 
-# Setup & Installation
-## 1. Upload the Code
-Clone or upload this repository into your Zammad deployment directory:
+- Zammad (Docker-based setup recommended)
+- Redis (Zammad usually provides one)
+- Docker & Docker Compose
+- Zammad Admin or Agent API token (must have permission to update ticket.owner)
+
+## Quick Start
+
+### Clone
+
+Clone the repository into your Zammad deployment directory (or wherever you manage additional services):
+
+```bash
 git clone https://github.com/19S87/zammad-round-robin-assignment.git
+cd zammad-round-robin-assignment/assignment
+```
 
-## 2. Configure Environment Variables
-Edit your .env file and add the following:
+### Configure environment variables
 
-    ZAMMAD_URL=               # https://your-zammad-domain
-    ZAMMAD_API_TOKEN=         # Zammad Admin or Agent API token
-    REDIS_HOST=zammad-redis   # Redis container name
-    REDIS_PORT=6379           # Redis port
-    HMAC_SECRET=              # Shared secret for webhook validation
+Create or edit a `.env` file and set the following variables:
 
-Notes
-    • API token must belong to a user with ticket.owner update permission
-    • HMAC_SECRET must match the value configured in Zammad Webhook
+```
+ZAMMAD_URL=https://your-zammad-domain
+ZAMMAD_API_TOKEN=your_api_token_here
+REDIS_HOST=zammad-redis
+REDIS_PORT=6379
+HMAC_SECRET=your_hmac_secret_here
+```
 
-## 3. Add Assignment Service to Docker Compose
-Edit your scenarios/add-assignment.yml (or equivalent):
----
-Service: 
+Notes:
+- The API token must belong to a user with permission to update ticket owners.
+- `HMAC_SECRET` must match the secret configured in the Zammad webhook.
+
+### Add to Docker Compose
+
+Add the service to your Docker Compose override (example `scenarios/add-assignment.yml`):
+
+```yaml
+version: '3.8'
+services:
   assignment:
     build:
       context: ./assignment
@@ -62,41 +99,83 @@ Service:
       - zammad-redis
     volumes:
       - ./assignment/data:/data
+```
 
-## 4. Start the Service
+### Start the service
+
+```bash
 docker compose -f docker-compose.yml -f scenarios/add-assignment.yml up -d
+```
 
-## 5. Create Webhook
-Navigate to:
+## Zammad Integration
+
+### Create Webhook
+
+In the Zammad Admin UI, navigate to:
+
 Admin → Settings → Webhooks
-Create a new webhook:
-Field           Value
-Name            Round Robin Assignment
-Endpoint        https://<your-domain>/assignment
-Method          POST
-Secret          HMAC_SECRET
-CUSTOM PAYLOAD  Yes
 
- PAYLOAD:         
+Create a new webhook with these example values:
+
+- Name: Round Robin Assignment
+- Endpoint: https://<your-domain>/assignment
+- Method: POST
+- Secret: (set to your HMAC_SECRET)
+- CUSTOM PAYLOAD: Yes
+
+Payload example:
+
+```json
 {
   "ticket_id": "#{ticket.id}",
   "group_id": "#{ticket.group_id}"
 }
+```
 
-## 6. Create Trigger
-Navigate to:
-Admin → Manage → Triggers
-Example trigger:
-CONDITIONS
-State is:   new
-Action:     Ticket created
-Owner is:   not set
-Group is:   <target group>
-EXECUTE
-Webhook → Round Robin Assignment
+The service verifies the HMAC signature of incoming requests using the configured `HMAC_SECRET`.
 
-## This project:
-- Does not override Zammad core behavior
-- Aligns with Zammad permission model
-- Is safe for upgrades
-- Encourages modular extensibility
+### Create Trigger
+
+In Zammad, create a Trigger to call the webhook when a ticket should be auto-assigned. Example trigger:
+
+Conditions
+- State is: new
+- Owner is: not set
+- Group is: <target group>
+
+Execute
+- Webhook → Round Robin Assignment
+
+This will call the assignment service which will pick the next eligible agent and update the ticket owner via the Zammad API.
+
+## Behavior & Security
+
+- The service skips users who are inactive or who cannot be assigned tickets.
+- It uses an API token to perform owner updates; ensure the token user has the appropriate permissions.
+- Webhook requests are validated using HMAC to prevent unauthorized calls.
+- All state (the round-robin cursors) are stored in Redis so the service is stateless and horizontally scalable.
+
+## Data & Persistence
+
+Persistent data is minimal: a Redis-backed cursor per group stored under the service Redis namespace. The local `./assignment/data` volume is used only for local state/diagnostics if configured.
+
+## Troubleshooting
+
+- 401 from Zammad API: verify `ZAMMAD_API_TOKEN` and the token user's permissions.
+- HMAC validation failures: ensure the webhook secret in Zammad matches `HMAC_SECRET`.
+- No eligible agents found: check group membership and user active/assignable status.
+- Redis errors: ensure `REDIS_HOST`/`REDIS_PORT` are reachable from the assignment container.
+
+Logs: check container logs for details:
+
+```bash
+docker logs -f zammad-rr-assignment
+```
+
+## Contributing
+
+Contributions, issues, and feature requests are welcome. Please open an issue or submit a pull request.
+
+## License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
