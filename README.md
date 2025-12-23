@@ -118,7 +118,7 @@ Admin → Settings → Webhooks
 Create a new webhook with these example values:
 
 - Name: Round Robin Assignment
-- Endpoint: https://<your-domain>/assignment
+- Endpoint: https://(your-domain)/assignment
 - Method: POST
 - Secret: (set to your HMAC_SECRET)
 - CUSTOM PAYLOAD: Yes
@@ -141,7 +141,7 @@ In Zammad, create a Trigger to call the webhook when a ticket should be auto-ass
 Conditions
 - State is: new
 - Owner is: not set
-- Group is: <target group>
+- <Group is: <target group>>
 
 Execute
 - Webhook → Round Robin Assignment
@@ -179,3 +179,4 @@ Contributions, issues, and feature requests are welcome. Please open an issue or
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the `LICENSE` file for details or https://www.gnu.org/licenses/agpl-3.0 for the full text.
+
